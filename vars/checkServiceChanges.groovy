@@ -9,7 +9,7 @@ def call(Map params) {
         error "checkServiceChanges: 'baseBranch' and 'servicePaths' are required parameters."
     }
 
-    echo "checkServiceChanges: Checking for changes on branch '${baseBranch}' relative to '${compareRef}' for services: ${servicePaths.join(', ')}"
+    echo "checkServiceChanges: Checking for changes on branch '${baseBranch}' relative to '${compareRef}'"
 
     try {
         if (credentialsId) {
@@ -22,35 +22,47 @@ def call(Map params) {
             sh "git fetch --tags ${remote} ${baseBranch}"
         }
     } catch (e) {
-        echo "WARNING: checkServiceChanges: Failed to fetch '${remote}/${baseBranch}'. Error: ${e.message}"
+        echo "WARNING: checkServiceChanges: Failed to fetch. Error: ${e.message}"
     }
 
     def changedFiles = []
     try {
-        def gitDiffCommand = "git diff --name-only ${compareRef}"
-        echo "checkServiceChanges: Executing Git command: '${gitDiffCommand}'"
-        def diffOutput = sh(returnStdout: true, script: gitDiffCommand).trim()
-        
-        // Trim and filter empty lines
-        changedFiles = diffOutput.split('\n').collect { it.trim() }.findAll { it != '' }
-        
-        echo "checkServiceChanges: Detected changed files:\n${changedFiles.join('\n')}"
+        def diffOutput = sh(returnStdout: true, script: "git diff --name-only ${compareRef}").trim()
+        // Primitive split and clean
+        def rawFiles = diffOutput.split('\n')
+        for (int i = 0; i < rawFiles.length; i++) {
+            def f = rawFiles[i].trim()
+            if (f != "") {
+                changedFiles.add(f)
+            }
+        }
+        echo "checkServiceChanges: Detected changed files: ${changedFiles}"
     } catch (e) {
         error "checkServiceChanges: Failed to get Git diff. Error: ${e.message}"
         return null
     }
 
-    // --- NEW LOGIC: Use findAll instead of loop mutation ---
-    def servicesToUpdate = servicePaths.findAll { servicePath ->
-        def cleanPath = servicePath.toString().trim()
-        def match = changedFiles.any { file -> file.startsWith("${cleanPath}/") }
+    // --- PRIMITIVE LOOP LOGIC (No Closures) ---
+    def servicesToUpdate = []
+    
+    for (int i = 0; i < servicePaths.size(); i++) {
+        def svc = servicePaths[i].toString().trim()
+        boolean match = false
+        
+        for (int j = 0; j < changedFiles.size(); j++) {
+            def file = changedFiles[j]
+            if (file.startsWith(svc + "/")) {
+                match = true
+                break // Found a match, stop checking files for this service
+            }
+        }
         
         if (match) {
-            echo "checkServiceChanges: Found match for service '${cleanPath}'"
+            echo "checkServiceChanges: Found match for service '${svc}'"
+            servicesToUpdate.add(svc)
         }
-        return match
     }
 
-    echo "checkServiceChanges: Identified services to update: ${servicesToUpdate.empty ? 'None' : servicesToUpdate.join(', ')}"
+    echo "checkServiceChanges: Identified services to update: ${servicesToUpdate}"
     return servicesToUpdate
 }
