@@ -72,8 +72,9 @@ def call(Map params) {
         echo "checkServiceChanges: Executing Git command: '${gitDiffCommand}'"
         def diffOutput = sh(returnStdout: true, script: gitDiffCommand).trim()
 
-        // Split output into a list of file paths, filtering out any empty lines
-        changedFiles = diffOutput.split('\n').findAll { it.trim() != '' }
+        // FIX: Explicitly trim each file path to remove hidden whitespace and filter empty lines
+        changedFiles = diffOutput.split('\n').collect { it.trim() }.findAll { it != '' }
+        
         if (changedFiles.isEmpty()) {
             echo "checkServiceChanges: No files detected as changed by 'git diff'."
         } else {
@@ -87,10 +88,16 @@ def call(Map params) {
     // --- Determine Services to Update ---
     def servicesToUpdate = []
     servicePaths.each { servicePath ->
+        // FIX: Ensure servicePath is a clean String without whitespace
+        def cleanServicePath = servicePath.toString().trim()
+        
         // Check if any of the changed files are located within the current service's directory
         // The startsWith("${servicePath}/") ensures we match files in subdirectories too.
-        if (changedFiles.any { it.startsWith("${servicePath}/") }) {
-            servicesToUpdate.add(servicePath)
+        def match = changedFiles.any { file -> file.startsWith("${cleanServicePath}/") }
+        
+        if (match) {
+            echo "checkServiceChanges: Found match for service '${cleanServicePath}'"
+            servicesToUpdate.add(cleanServicePath)
         }
     }
 
