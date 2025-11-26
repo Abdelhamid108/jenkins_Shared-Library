@@ -87,7 +87,9 @@ def call(Map params) {
 
     // --- Determine Services to Update ---
     def servicesToUpdate = []
-    servicePaths.each { servicePath ->
+    
+    // FIX: Use standard for-loop to avoid Jenkins CPS closure scope issues
+    for (servicePath in servicePaths) {
         // FIX: Ensure servicePath is a clean String without whitespace
         def cleanServicePath = servicePath.toString().trim()
         
